@@ -28,6 +28,8 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+static struct list wait_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -92,12 +94,14 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&wait_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  initial_thread->sleep_until = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -120,7 +124,7 @@ thread_start (void)
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
 void
-thread_tick (void) 
+thread_tick (int64_t current_ticks) 
 {
   struct thread *t = thread_current ();
 
@@ -133,6 +137,18 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+  
+  struct list_elem *e;
+  for (e = list_begin (&wait_list); e != list_end (&wait_list);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, waitelem);
+      if (t->sleep_until <= current_ticks){
+        t->sleep_until = 0;
+        list_remove(&t->waitelem);
+        thread_unblock(t);
+      }
+    }
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -202,6 +218,14 @@ thread_create (const char *name, int priority,
   thread_unblock (t);
 
   return tid;
+}
+
+void thread_sleep(int64_t sleep_time){
+  struct thread *t = thread_current ();
+  t->sleep_until = sleep_time;
+
+  list_push_back (&wait_list, &t->waitelem);
+  thread_block();
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -463,6 +487,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  t->sleep_until = 0;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

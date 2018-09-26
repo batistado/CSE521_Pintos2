@@ -72,9 +72,9 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-static bool less_than_sleep_time(const struct list_elem *,
-                                 const struct list_elem *,
-                                 void *);
+static bool less_than_sleep_time(const struct list_elem *, const struct list_elem *, void *);
+static bool greater_than_priority(const struct list_elem *, const struct list_elem *, void *);
+static void thread_preempt(struct thread *);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -218,10 +218,19 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  /* Add to run queue. */
-  thread_unblock (t);
+  thread_preempt (t);
 
   return tid;
+}
+
+static void thread_preempt(struct thread *new_thread){
+  struct thread *running_thread = thread_current ();
+
+  if (running_thread->priority < new_thread->priority){
+    thread_yield ();
+  } else {
+    thread_unblock (new_thread);
+  }
 }
 
 void thread_sleep(int64_t sleep_time){
@@ -230,6 +239,10 @@ void thread_sleep(int64_t sleep_time){
 
   list_insert_ordered (&wait_list, &t->waitelem, less_than_sleep_time, NULL);
   thread_block();
+}
+
+static bool greater_than_priority(const struct list_elem *x, const struct list_elem *y, void *aux UNUSED){
+  return list_entry (x, struct thread, elem)->priority > list_entry (y, struct thread, elem)->priority;
 }
 
 static bool less_than_sleep_time(const struct list_elem *x, const struct list_elem *y, void *aux UNUSED){
@@ -269,7 +282,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, greater_than_priority, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -339,8 +352,8 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+  if (cur != idle_thread)
+    list_insert_ordered (&ready_list, &cur->elem, greater_than_priority, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);

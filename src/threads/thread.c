@@ -72,6 +72,9 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+static bool less_than_sleep_time(const struct list_elem *,
+                                 const struct list_elem *,
+                                 void *);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -143,11 +146,12 @@ thread_tick (int64_t current_ticks)
        e = list_next (e))
     {
       struct thread *t = list_entry (e, struct thread, waitelem);
-      if (t->sleep_until <= current_ticks){
-        t->sleep_until = 0;
-        list_remove(&t->waitelem);
-        thread_unblock(t);
-      }
+      if (t->sleep_until > current_ticks)
+      break;
+
+      t->sleep_until = 0;
+      list_remove(&t->waitelem);
+      thread_unblock(t);
     }
 
   /* Enforce preemption. */
@@ -224,8 +228,12 @@ void thread_sleep(int64_t sleep_time){
   struct thread *t = thread_current ();
   t->sleep_until = sleep_time;
 
-  list_push_back (&wait_list, &t->waitelem);
+  list_insert_ordered (&wait_list, &t->waitelem, less_than_sleep_time, NULL);
   thread_block();
+}
+
+static bool less_than_sleep_time(const struct list_elem *x, const struct list_elem *y, void *aux UNUSED){
+  return list_entry (x, struct thread, waitelem)->sleep_until < list_entry (y, struct thread, waitelem)->sleep_until;
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled

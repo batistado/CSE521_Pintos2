@@ -30,6 +30,8 @@ static struct list all_list;
 
 static struct list wait_list;
 
+static struct semaphore sema;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -98,6 +100,7 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
   list_init (&wait_list);
+  sema_init (&sema, 1);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -235,10 +238,13 @@ static void thread_preempt(struct thread *new_thread){
 
 void thread_sleep(int64_t sleep_time){
   struct thread *t = thread_current ();
+  sema_down(&sema);
   t->sleep_until = sleep_time;
-
   list_insert_ordered (&wait_list, &t->waitelem, less_than_sleep_time, NULL);
+  sema_up(&sema);
+  enum intr_level old_level = intr_disable ();
   thread_block();
+  intr_set_level (old_level);
 }
 
 static bool greater_than_priority(const struct list_elem *x, const struct list_elem *y, void *aux UNUSED){

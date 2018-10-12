@@ -91,6 +91,9 @@ struct thread
     struct list_elem allelem;           /* List element for all threads list. */
     struct list_elem waitelem;
     int64_t sleep_until;
+    int oldPriority;
+    struct list lock_list;
+    struct lock *waiting_lock;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -111,6 +114,8 @@ extern bool thread_mlfqs;
 
 void thread_init (void);
 void thread_start (void);
+bool greater_than_priority_thread(const struct list_elem *, const struct list_elem *, void *);
+
 
 void thread_tick (int64_t);
 void thread_print_stats (void);
@@ -121,6 +126,7 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
+void thread_preempt(struct thread *);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);

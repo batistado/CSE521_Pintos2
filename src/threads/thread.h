@@ -116,7 +116,6 @@ void thread_init (void);
 void thread_start (void);
 bool greater_than_priority_thread(const struct list_elem *, const struct list_elem *, void *);
 
-
 void thread_tick (int64_t);
 void thread_print_stats (void);
 void thread_sleep(int64_t);

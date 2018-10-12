@@ -218,11 +218,7 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  thread_unblock (t);
-
-  if (priority > thread_current()->priority) {
-    thread_yield();
-  }
+  thread_preempt (t);
 
   return tid;
 }
@@ -291,9 +287,6 @@ thread_unblock (struct thread *t)
   list_insert_ordered (&ready_list, &t->elem, greater_than_priority_thread, NULL);
   t->status = THREAD_READY;
 
-  if (thread_current() != idle_thread && thread_current()->priority < t->priority )
-    thread_yield();
-
   intr_set_level (old_level);
 }
 
@@ -340,6 +333,14 @@ thread_exit (void)
 #ifdef USERPROG
   process_exit ();
 #endif
+  struct thread *curr = thread_current();
+
+  // release all locks
+  struct list_elem *e;
+  for (e = list_begin (&curr->lock_list); e != list_end (&curr->lock_list); e = list_next (e)) {
+    struct lock *lock = list_entry(e, struct lock, lock_elem);
+    lock_release(lock);
+  }
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us

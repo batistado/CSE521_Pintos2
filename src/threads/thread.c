@@ -147,9 +147,8 @@ thread_tick (int64_t current_ticks)
 
   if (thread_mlfqs) {
     struct thread *current_thread = thread_current();
-    if(current_thread != idle_thread)
-    {
-      current_thread->recent_cpu = addin(current_thread->recent_cpu, 1);
+    if(current_thread != idle_thread) {
+      current_thread->recent_cpu = add_ints(current_thread->recent_cpu, 1);
     }
     
     if (timer_ticks() % 100 == 0) {
@@ -158,7 +157,7 @@ thread_tick (int64_t current_ticks)
     }
 
     else if (timer_ticks() % 4  == 0) {
-      all_thread_calculate_priority();
+      adjust_priorities();
     }
   }
   
@@ -411,6 +410,7 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  sema_down(&sema);
   struct thread *current_thread = thread_current ();
   if (current_thread->priority == current_thread->oldPriority){
     current_thread->priority = new_priority;
@@ -418,7 +418,7 @@ thread_set_priority (int new_priority)
   } else {
     current_thread->oldPriority = new_priority;
   }
-
+  sema_up(&sema);
   thread_yield();
 }
 
@@ -439,20 +439,20 @@ thread_set_nice (int nice UNUSED)
 
   if (current_thread != idle_thread){
     current_thread->nice = nice;
-    thread_calculate_recent_cpu(current_thread);
+    adjust_recent_cpu(current_thread);
     thread_calculate_priority(current_thread);
     thread_yield ();
   }
 }
 
-void thread_calculate_recent_cpu(struct thread *t){
-  t->recent_cpu = addin(mulfx(divfx(mulin(load_avg, 2),addin(mulin(load_avg, 2), 1)), t->recent_cpu),t->nice);
+void adjust_recent_cpu(struct thread *t){
+  t->recent_cpu = add_ints(multiply_fixed_points(divide_fixed_points(multiply_ints(load_avg, 2),add_ints(multiply_ints(load_avg, 2), 1)), t->recent_cpu),t->nice);
 }
 
 void thread_calculate_priority(struct thread *t)
  {
    if (t != idle_thread) {
-     t->priority = PRI_MAX - tointround(divin(t->recent_cpu,4)) - (t->nice * 2);
+     t->priority = PRI_MAX - convert_to_int_round(divide_ints(t->recent_cpu,4)) - (t->nice * 2);
           
      if (t->priority > PRI_MAX)
         t->priority = PRI_MAX;
@@ -468,15 +468,14 @@ void thread_calculate_load_avg()
   if (thread_current() != idle_thread)
     ready_threads++;
 
-  load_avg = addfx(divin(mulin(load_avg, 59), 60), divin(tofxpt(ready_threads), 60));
+  load_avg = add_fixed_points(divide_ints(multiply_ints(load_avg, 59), 60), divide_ints(convert_to_fixed_point(ready_threads), 60));
   }
 
-void all_thread_calculate_priority () {
+void adjust_priorities () {
   struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list);
        e = list_next (e)) {
-    struct thread *t = list_entry (e, struct thread, allelem);
-    thread_calculate_priority(t);
+    thread_calculate_priority(list_entry (e, struct thread, allelem));
   }
   list_sort (&ready_list, greater_than_priority_thread, NULL);
 }
@@ -485,8 +484,7 @@ void all_thread_calculate_recent_cpu () {
   struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list);
        e = list_next (e)) {
-    struct thread *t = list_entry (e, struct thread, allelem);
-    thread_calculate_recent_cpu(t);
+    adjust_recent_cpu(list_entry (e, struct thread, allelem));
   }
 }
 
@@ -502,14 +500,14 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  return tointround(mulin(load_avg,100));
+  return convert_to_int_round(multiply_ints(load_avg,100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  return tointround(mulin(thread_current()->recent_cpu,100)) ;
+  return convert_to_int_round(multiply_ints(thread_current()->recent_cpu,100)) ;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -633,11 +631,7 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else
-  {
-    struct thread *t = list_entry (list_pop_front (&ready_list), struct thread, elem);
-    return t;
-  }
+  return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
 /* Completes a thread switch by activating the new thread's page

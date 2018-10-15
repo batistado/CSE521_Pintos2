@@ -117,9 +117,9 @@ extern bool thread_mlfqs;
 void thread_init (void);
 void thread_start (void);
 bool greater_than_priority_thread(const struct list_elem *, const struct list_elem *, void *);
-void thread_calculate_recent_cpu(struct thread *);
+void adjust_recent_cpu(struct thread *);
 void thread_calculate_priority(struct thread *);
-void all_thread_calculate_priority (void);
+void adjust_priorities (void);
 void all_thread_calculate_recent_cpu (void);
 void thread_calculate_load_avg(void);
 

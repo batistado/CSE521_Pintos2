@@ -1,73 +1,62 @@
 #include <stdint.h>
 
-#define F 16384
+#define f (2 << 14)
 
-int tofxpt(int a);
-int tointfloor(int a);
-int tointround(int a);
-int addin(int a, int b);
-int addfx(int a, int b);
-int subin(int a, int b);
-int subfx(int a, int b);
-int mulin(int a, int b);
-int mulfx(int a, int b);
-int divin(int a, int b);
-int divfx(int a, int b);
+int convert_to_fixed_point(int x);
+int convert_to_int_floor(int x);
+int convert_to_int_round(int x);
+int add_ints(int x, int y);
+int add_fixed_points(int x, int y);
+int subtract_ints(int x, int y);
+int subtract_fixed_points(int x, int y);
+int multiply_ints(int x, int y);
+int multiply_fixed_points(int x, int y);
+int divide_ints(int x, int y);
+int divide_fixed_points(int x, int y);
 
-int tofxpt(int a)
-{
-	return a * F;
+int convert_to_fixed_point(int x){
+	return x * f;
 }
 
-int tointfloor(int a)
-{
-	return a / F;
+int convert_to_int_floor(int x){
+	return x / f;
 }
 
-int tointround(int a)
-{
-	if (a>=0)
-		return (a + F/2) / F;
-	else
-		return (a - F/2) / F;
+int convert_to_int_round(int x){
+	if (x >= 0)
+		return (x + f / 2) / f;
+	
+	return (x - f / 2) / f;
 }
 
-int addin(int a, int b)
-{
-	return a + (b * F);
+int add_ints(int x, int y){
+	return x + (y * f);
 }
 
-int addfx(int a, int b)
-{
-	return a + b;
+int add_fixed_points(int x, int y){
+	return x + y;
 }
 
-int subin(int a, int b)
-{
-	return a - (b * F);
+int subtract_ints(int x, int y){
+	return x - (y * f);
 }
 
-int subfx(int a, int b)
-{
-	return a - b;
+int subtract_fixed_points(int x, int y){
+	return x - y;
 }
 
-int mulin(int a, int b)
-{
-	return a * b;
+int multiply_ints(int x, int y){
+	return x * y;
 }
 
-int mulfx(int a, int b)
-{
-	return ((int64_t) a) * b / F;
+int multiply_fixed_points(int x, int y){
+	return ((int64_t)x) * y / f;
 }
 
-int divin(int a, int b)
-{
-	return a / b;
+int divide_ints(int x, int y){
+	return x / y;
 }
 
-int divfx(int a, int b)
-{
-	return ((int64_t) a) * F / b;
+int divide_fixed_points(int x, int y){
+	return ((int64_t)x) * f / y;
 }

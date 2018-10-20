@@ -141,7 +141,6 @@ sema_up (struct semaphore *sema)
   if (!list_empty (&sema->waiters)){
     list_sort(&sema->waiters, greater_than_priority_thread, NULL);
     thread_preempt (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
-
   }
   
   intr_set_level (old_level);
@@ -405,11 +404,7 @@ greater_than_priority_lock(const struct list_elem* a, const struct list_elem *b,
 }
 
 static bool
-greater_than_priority_cond_sema (const struct list_elem *a,
-                          const struct list_elem *b,
-                          void *aux UNUSED)
+greater_than_priority_cond_sema (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
-  return list_entry(list_front(&(list_entry (a, struct semaphore_elem, elem))->semaphore.waiters),
-                  struct thread, elem)->priority > list_entry(list_front(&(list_entry (b, struct semaphore_elem, elem))->semaphore.waiters),
-                  struct thread, elem)->priority;
+  return list_entry(list_front(&(list_entry (a, struct semaphore_elem, elem))->semaphore.waiters), struct thread, elem)->priority > list_entry(list_front(&(list_entry (b, struct semaphore_elem, elem))->semaphore.waiters), struct thread, elem)->priority;
 }

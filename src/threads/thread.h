@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -89,13 +90,14 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
-    struct list_elem waitelem;
-    int64_t sleep_until;
-    int oldPriority;
-    struct list lock_list;
-    struct lock *waiting_lock;
-    int nice;
-    int recent_cpu;
+    bool exception;
+    struct thread* parent;
+    int error_code;
+    struct list files;
+    int fd_count;
+    struct list child_processes;
+    struct semaphore child_sema;
+    int waiting_on_child;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -109,6 +111,13 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
+struct child {
+    tid_t tid;
+    struct list_elem elem;
+    int error_code;
+    bool used;
+};
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
@@ -116,23 +125,15 @@ extern bool thread_mlfqs;
 
 void thread_init (void);
 void thread_start (void);
-bool greater_than_priority_thread(const struct list_elem *, const struct list_elem *, void *);
-void adjust_recent_cpu(struct thread *);
-void thread_calculate_priority(struct thread *);
-void adjust_priorities (void);
-void all_thread_calculate_recent_cpu (void);
-void thread_calculate_load_avg(void);
 
-void thread_tick (int64_t);
+void thread_tick (void);
 void thread_print_stats (void);
-void thread_sleep(int64_t);
 
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
-void thread_preempt(struct thread *);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);

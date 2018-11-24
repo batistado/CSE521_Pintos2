@@ -130,7 +130,9 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  lock_acquire(&file_lock);
   closeAllFiles(&thread_current()->files);
+  lock_release(&file_lock);
   printf("%s: exit(%d)\n",cur->name, cur->error_code);
 
   /* Destroy the current process's page directory and switch back
@@ -250,6 +252,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
+  lock_acquire(&file_lock);
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
@@ -357,6 +360,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+  lock_release(&file_lock);
   return success;
 }
 

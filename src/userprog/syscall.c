@@ -46,8 +46,10 @@ syscall_handler (struct intr_frame *f UNUSED)
 
     case SYS_OPEN:
     {
-		//isValidAddress((void *)(stack_ptr+1));
+		isValidAddress((void *)(stack_ptr+1));
+		lock_acquire(&file_lock);
 		struct file* fptr = filesys_open ((char *)*(stack_ptr+1));
+		lock_release(&file_lock);
 
 		if (fptr!=NULL) {
       struct struct_file *file = malloc(sizeof(*file));
@@ -64,12 +66,14 @@ syscall_handler (struct intr_frame *f UNUSED)
 
     case SYS_EXEC:
 		isValidAddress((void *)(stack_ptr+1));
-		f->eax = process_execute((char *)*(stack_ptr+1));
+		f->eax = execute_process((char *)*(stack_ptr+1));
 		break;
 
     case SYS_FILESIZE:
     isValidAddress((void *)(stack_ptr+1));
+		lock_acquire(&file_lock);
 		f->eax = file_length (list_search(&thread_current()->files, *(stack_ptr+1))->fptr);
+		lock_release(&file_lock);
 		break;
 
  		case SYS_EXIT:
@@ -81,17 +85,23 @@ syscall_handler (struct intr_frame *f UNUSED)
     //hex_dump(*(stack_ptr+1),*(stack_ptr+1),16,true);
     //printf("%s", (char *) *(stack_ptr+1));
     isValidAddress((void *)(stack_ptr+1));
+		lock_acquire(&file_lock);
 		f->eax = filesys_create((char *) *(stack_ptr+1),*(stack_ptr+2));
+		lock_release(&file_lock);
 		break;
 
 		case SYS_SEEK:
 		isValidAddress((void *)(stack_ptr+2));
+		lock_acquire(&file_lock);
 		file_seek(list_search(&thread_current()->files, *(stack_ptr+1))->fptr,*(stack_ptr+2));
+		lock_release(&file_lock);
 		break;
 
 		case SYS_TELL:
 		isValidAddress((void *)(stack_ptr+1));
+		lock_acquire(&file_lock);
 		f->eax = file_tell(list_search(&thread_current()->files, *(stack_ptr+1))->fptr);
+		lock_release(&file_lock);
 		break;
 
     case SYS_READ:
@@ -107,10 +117,14 @@ syscall_handler (struct intr_frame *f UNUSED)
 		{
 			struct struct_file* fptr = list_search(&thread_current()->files, *(stack_ptr+1));
 			if(fptr==NULL)
-				f->eax=-1;
-			else
-				f->eax = file_read_at (fptr->fptr, (void *)*(stack_ptr+2), *(stack_ptr+3),0);
+				f->eax = -1;
+			else {
+				lock_acquire(&file_lock);
+				f->eax = file_read (fptr->fptr, *(stack_ptr+2), *(stack_ptr+3));
+				lock_release(&file_lock);
+			}
 		}
+		break;
 
 		case SYS_WAIT:
 		isValidAddress((void *)(stack_ptr+1));
@@ -126,21 +140,28 @@ syscall_handler (struct intr_frame *f UNUSED)
       struct struct_file* fptr = list_search(&thread_current()->files, *(stack_ptr+1));
 			if(fptr==NULL)
 				f->eax = -1;
-			else
-				f->eax = file_write_at (fptr->fptr, (void *)*(stack_ptr + 2), *(stack_ptr + 3),0);
-    }
+			else {
+				lock_acquire(&file_lock);
+				f->eax = file_write (fptr->fptr, (void *)*(stack_ptr + 2), *(stack_ptr + 3));
+				lock_release(&file_lock);
+			}
+		}
 		break;
 
     case SYS_REMOVE:
-		isValidAddress((void *)*(stack_ptr+1));
+		isValidAddress((void *)(stack_ptr+1));
+		lock_acquire(&file_lock);
 		if(!filesys_remove((char *)*(stack_ptr+1)))
 			f->eax = false;
 		else
 			f->eax = true;
+		lock_release(&file_lock);
 		break;
 
     case SYS_CLOSE:
+		lock_acquire(&file_lock);
 		closeFile(&thread_current()->files,*(stack_ptr+1));
+		lock_release(&file_lock);
 		break;
 
 		default:
@@ -214,4 +235,20 @@ void exit_process(int status) {
 		sema_up(&thread_current()->parent->child_sema);
 
 	thread_exit();
+}
+
+int execute_process(char *file_name) {
+	char * fn_cp = malloc (strlen(file_name)+1);
+	strlcpy(fn_cp, file_name, strlen(file_name)+1);
+	
+	char * save_ptr;
+	fn_cp = strtok_r(fn_cp," ",&save_ptr);
+
+	struct file* f = filesys_open (fn_cp);
+	if(f==NULL) {
+		return -1;
+	}
+
+	file_close(f);
+	return process_execute(file_name);
 }

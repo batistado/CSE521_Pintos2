@@ -13,10 +13,6 @@
 #include "devices/input.h"
 
 static void syscall_handler (struct intr_frame *);
-void isValidAddress(const void*);
-void closeAllFiles(struct list* files);
-void closeFile(struct list* files, int fd);
-struct struct_file* list_search(struct list* files, int fd);
 
 extern bool running;
 
@@ -36,17 +32,17 @@ static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
   int *stack_ptr = f->esp;
+	isValidAddress((void *)(stack_ptr));
+	isInitialAddressValid(stack_ptr);
 
 	switch (*stack_ptr)
 	{
-    
 		case SYS_HALT:
 		shutdown_power_off();
 		break;
 
     case SYS_OPEN:
     {
-		isValidAddress((void *)(stack_ptr+1));
 		lock_acquire(&file_lock);
 		struct file* fptr = filesys_open ((char *)*(stack_ptr+1));
 		lock_release(&file_lock);
@@ -65,40 +61,37 @@ syscall_handler (struct intr_frame *f UNUSED)
     }
 
     case SYS_EXEC:
-		isValidAddress((void *)(stack_ptr+1));
 		f->eax = execute_process((char *)*(stack_ptr+1));
 		break;
 
     case SYS_FILESIZE:
-    isValidAddress((void *)(stack_ptr+1));
+    
 		lock_acquire(&file_lock);
 		f->eax = file_length (list_search(&thread_current()->files, *(stack_ptr+1))->fptr);
 		lock_release(&file_lock);
 		break;
 
  		case SYS_EXIT:
-		isValidAddress((void *)(stack_ptr+1));
+		isValidAddress((void*)stack_ptr + 1);
 		exit_process(*(stack_ptr+1));
 		break;
 
     case SYS_CREATE:
     //hex_dump(*(stack_ptr+1),*(stack_ptr+1),16,true);
     //printf("%s", (char *) *(stack_ptr+1));
-    isValidAddress((void *)(stack_ptr+1));
 		lock_acquire(&file_lock);
 		f->eax = filesys_create((char *) *(stack_ptr+1),*(stack_ptr+2));
 		lock_release(&file_lock);
 		break;
 
 		case SYS_SEEK:
-		isValidAddress((void *)(stack_ptr+2));
 		lock_acquire(&file_lock);
 		file_seek(list_search(&thread_current()->files, *(stack_ptr+1))->fptr,*(stack_ptr+2));
 		lock_release(&file_lock);
 		break;
 
 		case SYS_TELL:
-		isValidAddress((void *)(stack_ptr+1));
+		
 		lock_acquire(&file_lock);
 		f->eax = file_tell(list_search(&thread_current()->files, *(stack_ptr+1))->fptr);
 		lock_release(&file_lock);
@@ -127,12 +120,10 @@ syscall_handler (struct intr_frame *f UNUSED)
 		break;
 
 		case SYS_WAIT:
-		isValidAddress((void *)(stack_ptr+1));
 		f->eax = process_wait(*(stack_ptr+1));
 		break;
 
 		case SYS_WRITE:
-    isValidAddress((void *)(stack_ptr+1));
 		if(*(stack_ptr+1)==1) {
 			putbuf((char *)*(stack_ptr+2),*(stack_ptr+3));
       f->eax = *(stack_ptr + 3);
@@ -149,7 +140,6 @@ syscall_handler (struct intr_frame *f UNUSED)
 		break;
 
     case SYS_REMOVE:
-		isValidAddress((void *)(stack_ptr+1));
 		lock_acquire(&file_lock);
 		if(!filesys_remove((char *)*(stack_ptr+1)))
 			f->eax = false;
@@ -171,7 +161,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 void isValidAddress(const void *vaddr)
 {
-	if (!is_user_vaddr(vaddr) || pagedir_get_page(thread_current()->pagedir, vaddr) == NULL) {
+	if (!is_user_vaddr(vaddr) || !pagedir_get_page(thread_current()->pagedir, vaddr)) {
     exit_process(-1);
   }
 }
@@ -193,14 +183,12 @@ void closeFile(struct list* files, int fd) {
 void closeAllFiles(struct list* files) {
  	struct list_elem *e;
   for (e = list_begin (files); e != list_end (files);
-      e = list_next (e))
-  {
+      e = list_next (e)) {
     struct struct_file *f = list_entry (e, struct struct_file, elem);
-    
     file_close(f->fptr);
     list_remove(e);
   }
-} 
+}
 
 struct struct_file* list_search(struct list* files, int fd) {
  	struct list_elem *e;
@@ -251,4 +239,35 @@ int execute_process(char *file_name) {
 
 	file_close(f);
 	return process_execute(file_name);
+}
+
+void isInitialAddressValid(int *stack_ptr) {
+	switch(*stack_ptr)
+	{
+		case SYS_OPEN:
+		case SYS_REMOVE:
+		case SYS_EXEC:
+			isValidAddress((void *)(stack_ptr+1));
+			isValidAddress((void *)*(stack_ptr+1));
+		break;
+		case SYS_EXIT:
+		case SYS_WAIT:
+		case SYS_FILESIZE:
+		case SYS_TELL:
+		case SYS_CLOSE:
+			isValidAddress((void *)(stack_ptr+1));
+		break;
+		case SYS_SEEK:
+			isValidAddress((void *)(stack_ptr+2));
+		break;
+		case SYS_READ:
+		case SYS_WRITE:
+			isValidAddress((void *)(stack_ptr+3));
+			isValidAddress((void *)*(stack_ptr+2));
+		break;
+		case SYS_CREATE:
+			isValidAddress((void *)(stack_ptr+2));
+			isValidAddress((void *)*(stack_ptr+1));
+		break;
+	}
 }

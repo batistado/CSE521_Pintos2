@@ -100,6 +100,7 @@ struct thread
     struct list child_processes;
     struct semaphore child_sema;
     int waiting_on_child;
+    struct file *self;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

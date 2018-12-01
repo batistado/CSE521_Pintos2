@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -22,7 +23,6 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void get_file_name(char *cmd_with_args, char *file_name);
-static void get_command_args(char *cmd_with_args, char* argv[], int *argc);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -47,7 +47,14 @@ process_execute (const char *file_name)
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (actual_file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (fn_copy);
+
+  struct thread* current_thread = thread_current();
+  sema_down(&current_thread->child_sema);
+
+  if (current_thread->exception)
+    return -1;
+
   return tid;
 }
 
@@ -59,6 +66,7 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+  struct thread* current_thread = thread_current();
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -66,12 +74,17 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
-  //hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
+  if (!success) {
+    current_thread->parent->exception = true;
+    sema_up(&current_thread->parent->child_sema);
+    thread_exit();
+  } else {
+    current_thread->parent->exception = false;
+    sema_up(&current_thread->parent->child_sema);
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -98,6 +111,7 @@ process_wait (tid_t child_tid UNUSED)
   struct list_elem *e1=NULL;
   struct list_elem *e;
   struct child* ch;
+  struct thread* current_thread = thread_current();
 
 
   for (e = list_begin (&thread_current()->child_processes); e != list_end (&thread_current()->child_processes);
@@ -113,13 +127,13 @@ process_wait (tid_t child_tid UNUSED)
   if(!ch || !e1)
     return -1;
   
-  thread_current()->waiting_on_child = ch->tid;
+  current_thread->waiting_on_child = ch->tid;
     
   if(!ch->used)
-    sema_down(&thread_current()->child_sema);
+    sema_down(&current_thread->child_sema);
   
   list_remove(e1);
-  
+
   return ch->error_code;
 }
 
@@ -130,8 +144,12 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  if (cur->error_code == -999)
+    exit_process(-1);
+
   lock_acquire(&file_lock);
-  closeAllFiles(&thread_current()->files);
+  file_close(cur->self);
+  closeAllFiles(&cur->files);
   lock_release(&file_lock);
   printf("%s: exit(%d)\n",cur->name, cur->error_code);
 
@@ -357,9 +375,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   success = true;
   free(fn_copy);
 
+  file_deny_write(file);
+  thread_current()->self = file;
+
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
   lock_release(&file_lock);
   return success;
 }
@@ -570,17 +590,4 @@ get_file_name(char *cmd_with_args, char *file_name)
   char *placeholder;
   strlcpy (file_name, cmd_with_args, PGSIZE);
   file_name = strtok_r(file_name, " ", &placeholder);
-}
-
-static void
-get_command_args(char *cmd_with_args, char* argv[], int *argc)
-{
-  char *placeholder;
-  argv[0] = strtok_r(cmd_with_args, " ", &placeholder);
-  char *token;
-  *argc = 1;
-  while((token = strtok_r(NULL, " ", &placeholder))!=NULL)
-  {
-    argv[(*argc)++] = token;
-  }
 }

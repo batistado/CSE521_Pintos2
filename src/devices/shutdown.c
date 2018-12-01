@@ -101,9 +101,11 @@ shutdown_power_off (void)
 
   /* This is a special power-off sequence supported by Bochs and
      QEMU, but not by physical hardware. */
-  for (p = s; *p != '\0'; p++)
+  for (p = s; *p != '\0'; p++) {
+    outw(0xB004, 0x2000);
     outb (0x8900, *p);
-
+  }
+  
   /* For newer versions of qemu, you must run with -device
    * isa-debug-exit, which exits on any write to an IO port (by
    * default 0x501).  Qemu's exit code is double the value plus one,

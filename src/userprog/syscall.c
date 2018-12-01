@@ -1,5 +1,6 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
@@ -113,7 +114,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 				f->eax = -1;
 			else {
 				lock_acquire(&file_lock);
-				f->eax = file_read (fptr->fptr, *(stack_ptr+2), *(stack_ptr+3));
+				f->eax = file_read (fptr->fptr, (void*) *(stack_ptr+2), *(stack_ptr+3));
 				lock_release(&file_lock);
 			}
 		}
@@ -221,6 +222,8 @@ void exit_process(int status) {
 
 	if(thread_current()->parent->waiting_on_child == thread_current()->tid)
 		sema_up(&thread_current()->parent->child_sema);
+
+	//free(e);
 
 	thread_exit();
 }

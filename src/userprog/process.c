@@ -46,6 +46,8 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (actual_file_name, PRI_DEFAULT, start_process, fn_copy);
+  free(actual_file_name);
+
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
 
@@ -149,8 +151,9 @@ process_exit (void)
 
   lock_acquire(&file_lock);
   file_close(cur->self);
-  closeAllFiles(&cur->files);
   lock_release(&file_lock);
+  closeAllFiles(&cur->files);
+  
   printf("%s: exit(%d)\n",cur->name, cur->error_code);
 
   /* Destroy the current process's page directory and switch back
@@ -286,6 +289,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Open executable file. */
   file = filesys_open (actual_file_name);
+
+  free(actual_file_name);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);

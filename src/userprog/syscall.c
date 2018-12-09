@@ -49,7 +49,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 		lock_release(&file_lock);
 
 		if (fptr!=NULL) {
-      struct struct_file *file = malloc(sizeof(*file));
+			struct struct_file *file = malloc(sizeof(*file));
 			file->fptr = fptr;
 			file->fd = thread_current()->fd_count;
 			thread_current()->fd_count++;
@@ -78,8 +78,6 @@ syscall_handler (struct intr_frame *f UNUSED)
 		break;
 
     case SYS_CREATE:
-    //hex_dump(*(stack_ptr+1),*(stack_ptr+1),16,true);
-    //printf("%s", (char *) *(stack_ptr+1));
 		lock_acquire(&file_lock);
 		f->eax = filesys_create((char *) *(stack_ptr+1),*(stack_ptr+2));
 		lock_release(&file_lock);
@@ -150,9 +148,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 		break;
 
     case SYS_CLOSE:
-		lock_acquire(&file_lock);
 		closeFile(&thread_current()->files,*(stack_ptr+1));
-		lock_release(&file_lock);
 		break;
 
 		default:
@@ -169,26 +165,35 @@ void isValidAddress(const void *vaddr)
 
 void closeFile(struct list* files, int fd) {
  	struct list_elem *e;
-  for (e = list_begin (files); e != list_end (files);
-      e = list_next (e))
-  {
-    struct struct_file *f = list_entry (e, struct struct_file, elem);
+
+		while(!list_empty(files)){
+		e = list_pop_front(files);
+		struct struct_file *f = list_entry (e, struct struct_file, elem);
     if(f->fd == fd)
     {
+			lock_acquire(&file_lock);
       file_close(f->fptr);
+			lock_release(&file_lock);
       list_remove(e);
     }
-  }
+		free(f);
+	}
+
 }
 
 void closeAllFiles(struct list* files) {
  	struct list_elem *e;
-  for (e = list_begin (files); e != list_end (files);
-      e = list_next (e)) {
-    struct struct_file *f = list_entry (e, struct struct_file, elem);
+
+	while(!list_empty(files)){
+		e = list_pop_front(files);
+		struct struct_file *f = list_entry (e, struct struct_file, elem);
+		lock_acquire(&file_lock);
     file_close(f->fptr);
+		lock_release(&file_lock);
     list_remove(e);
-  }
+		free(f);
+	}
+
 }
 
 struct struct_file* list_search(struct list* files, int fd) {
@@ -223,8 +228,6 @@ void exit_process(int status) {
 	if(thread_current()->parent->waiting_on_child == thread_current()->tid)
 		sema_up(&thread_current()->parent->child_sema);
 
-	//free(e);
-
 	thread_exit();
 }
 
@@ -235,7 +238,9 @@ int execute_process(char *file_name) {
 	char * save_ptr;
 	fn_cp = strtok_r(fn_cp," ",&save_ptr);
 
+	lock_acquire(&file_lock);
 	struct file* f = filesys_open (fn_cp);
+	lock_release(&file_lock);
 	if(f==NULL) {
 		return -1;
 	}
